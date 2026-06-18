@@ -39,12 +39,33 @@ def _load_dataframe() -> pd.DataFrame:
 
 @lru_cache
 def get_connection() -> duckdb.DuckDBPyConnection:
-    """Build an in-memory DuckDB with the source data registered as one table."""
-    df = _load_dataframe()
+    """Build an in-memory DuckDB with the source data."""
     con = duckdb.connect(":memory:")
-    con.register("_src", df)
-    con.execute(f'CREATE TABLE "{settings.table_name}" AS SELECT * FROM _src')
-    con.unregister("_src")
+    
+    path = settings.data_path
+    if settings.source_type == "local" and path.lower().endswith(".pbix"):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        
+        # We extract into a temp folder (lru_cache ensures this only happens once)
+        temp_dir = tempfile.mkdtemp()
+        print(f"Extracting .pbix data to {temp_dir}...")
+        subprocess.run([r"C:\pbi-tools\pbi-tools.exe", "export-data", "-pbixPath", path, "-outPath", temp_dir], check=True, shell=True)
+        
+        for csv_file in Path(temp_dir).glob("*.csv"):
+            table_name = csv_file.stem
+            # Ignore Power BI's internal hidden date tables to keep the LLM focused
+            if table_name.startswith("LocalDateTable_") or table_name.startswith("DateTableTemplate_"):
+                continue
+            # Double quotes around path needed for windows paths in duckdb
+            con.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM read_csv_auto(\'{csv_file}\')')
+    else:
+        df = _load_dataframe()
+        con.register("_src", df)
+        con.execute(f'CREATE TABLE "{settings.table_name}" AS SELECT * FROM _src')
+        con.unregister("_src")
+        
     return con
 
 
@@ -52,13 +73,23 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 def schema() -> tuple[str, frozenset[str]]:
     """Return (human-readable schema text for the prompt, set of allowed identifiers)."""
     con = get_connection()
-    rows = con.execute(f'DESCRIBE "{settings.table_name}"').fetchall()
-    cols = [(r[0], r[1]) for r in rows]  # (name, type)
-    lines = [f'TABLE: "{settings.table_name}"', "COLUMNS:"]
-    for name, dtype in cols:
-        lines.append(f'  "{name}" ({dtype})')
-    allowed = {settings.table_name} | {name for name, _ in cols}
-    return "\n".join(lines), frozenset(allowed)
+    tables = con.execute("SHOW TABLES").fetchall()
+    
+    lines = []
+    allowed = set()
+    for (t_name,) in tables:
+        allowed.add(t_name)
+        lines.append(f'TABLE: "{t_name}"')
+        lines.append("COLUMNS:")
+        
+        rows = con.execute(f'DESCRIBE "{t_name}"').fetchall()
+        for r in rows:
+            name, dtype = r[0], r[1]
+            lines.append(f'  "{name}" ({dtype})')
+            allowed.add(name)
+        lines.append("")
+        
+    return "\n".join(lines).strip(), frozenset(allowed)
 
 
 def run_sql(sql: str) -> list[dict]:

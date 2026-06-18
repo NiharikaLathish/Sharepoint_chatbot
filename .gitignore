@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 test.xlsx
 debug_download.bin
+*.pbix
+uploads/
+extracted_data/
