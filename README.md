@@ -1,4 +1,4 @@
-# SharePoint-data Chatbot (Option B)
+# SharePoint-data Chatbot 
 
 Ask plain-English questions about a data file and get answers backed by **real SQL
 queries** over the actual data — never invented numbers. Reads the data's columns
