@@ -12,6 +12,8 @@ async def complete(system: str, user: str, temperature: float = 0.1) -> str:
         return await _openai(system, user, temperature)
     if provider == "anthropic":
         return await _anthropic(system, user, temperature)
+    if provider == "groq":
+        return await _groq(system, user, temperature)
     raise ValueError(f"Unknown LLM_PROVIDER: {settings.llm_provider}")
 
 
@@ -52,3 +54,14 @@ async def _anthropic(system: str, user: str, temperature: float) -> str:
         system=system, messages=[{"role": "user", "content": user}],
     )
     return resp.content[0].text.strip()
+
+
+async def _groq(system: str, user: str, temperature: float) -> str:
+    from groq import AsyncGroq
+    client = AsyncGroq(api_key=settings.groq_api_key)
+    resp = await client.chat.completions.create(
+        model=settings.llm_model, temperature=temperature,
+        messages=[{"role": "system", "content": system},
+                  {"role": "user", "content": user}],
+    )
+    return resp.choices[0].message.content.strip()

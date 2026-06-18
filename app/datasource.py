@@ -23,25 +23,13 @@ def _load_dataframe() -> pd.DataFrame:
         from .sharepoint import fetch_file_bytes
         raw = fetch_file_bytes(settings.sharepoint_file_url, settings.graph_token)
         return pd.read_excel(io.BytesIO(raw))
-    # if settings.source_type == "gdrive":
-    #     import requests
-    #     url = f"https://drive.google.com/uc?export=download&id={settings.gdrive_file_id}"
-    #     response = requests.get(url, allow_redirects=True)
-    #     response.raise_for_status()
-    #     return pd.read_excel(io.BytesIO(response.content))
     if settings.source_type == "gdrive":
         import requests
-
-    url = f"https://drive.google.com/uc?export=download&id={settings.gdrive_file_id}"
-    response = requests.get(url, allow_redirects=True)
-
-    print("Status:", response.status_code)
-    print("Content-Type:", response.headers.get("Content-Type"))
-
-    with open("debug_download.bin", "wb") as f:
-        f.write(response.content)
-
-    raise Exception("Downloaded file saved as debug_download.bin")
+        url = f"https://drive.google.com/uc?export=download&id={settings.gdrive_file_id}"
+        response = requests.get(url, allow_redirects=True)
+        response.raise_for_status()
+        return pd.read_excel(io.BytesIO(response.content))
+        
     # local
     path = settings.data_path
     if path.lower().endswith(".csv"):
